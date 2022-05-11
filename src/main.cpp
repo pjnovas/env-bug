@@ -27,10 +27,20 @@ PubSubClient client(espClient);
 byte sensorAddr[8];
 unsigned long lastUpdate;
 
+void Log(String message)
+{
+#ifdef DEBUG
+  Serial.println(message);
+#endif
+}
+
 void setup()
 {
+#ifdef DEBUG
   Serial.begin(115200);
   delay(10);
+#endif
+  Log("STARTED");
 
   ds.search(sensorAddr);
   OneWire::crc8(sensorAddr, 7);
@@ -39,6 +49,21 @@ void setup()
   WiFi.hostname(WIFI_HOSTNAME);
   WiFi.begin(ssid, password);
 
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Log("WIFI;TRY");
+
+    if (WiFi.status() == WL_CONNECT_FAILED)
+    {
+      Log("WIFI;OFF");
+      Log(String(WiFi.status()));
+      return;
+    }
+
+    delay(1000);
+  }
+
+  Log("WIFI;ON");
   client.setServer(mqtt_server, mqtt_port);
 }
 
@@ -67,30 +92,61 @@ float getTemperature()
   return (float)raw / 16.0;
 }
 
-void loop(void)
+bool mqttReady()
 {
-  if ((millis() - lastUpdate) > publishInterval)
+  if (client.connected())
+    return true;
+
+  Log("MQTT;TRY");
+
+  String willTopic = String(clientId) + "/status";
+  const char *willTopic_ = willTopic.c_str();
+
+  if (client.connect(clientId, mqtt_user, mqtt_pass, willTopic_, 0, true, "offline", true))
+  {
+    Log("MQTT;ON");
+    return client.publish(willTopic_, "online", true);
+  }
+
+  Log("MQTT;OFF");
+  delay(1000); // wait for reconnect
+  return false;
+}
+
+bool isMeasureTime()
+{
+  return (millis() - lastUpdate) > publishInterval;
+}
+
+bool publishTemp()
+{
+  float celsius = getTemperature();
+
+  char tempStr[8];
+  dtostrf(celsius, 6, 2, tempStr);
+
+  Log("MQTT;PUB");
+  return client.publish(mqtt_topic, tempStr);
+}
+
+void loop()
+{
+  if (isMeasureTime())
   {
     if (WiFi.status() != WL_CONNECTED)
     {
-      Serial.println("WIFI OFF");
+      Log("WIFI;OFF");
       return;
     }
 
-    if (!client.connected() && !client.connect(clientId, mqtt_user, mqtt_pass))
+    if (!mqttReady())
+      return;
+
+    if (publishTemp())
     {
-      Serial.println("FAILED CONN BROKER");
-      delay(1000); // wait for reconnect
-      return;
+      lastUpdate = millis();
     }
 
-    float celsius = getTemperature();
-
-    char tempStr[8];
-    dtostrf(celsius, 6, 2, tempStr);
-    client.publish(mqtt_topic, tempStr);
     client.loop();
-
-    lastUpdate = millis();
   }
 }
