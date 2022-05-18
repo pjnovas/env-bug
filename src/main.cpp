@@ -25,7 +25,7 @@ PubSubClient client(espClient);
 
 // State
 byte sensorAddr[8];
-unsigned long lastUpdate;
+unsigned long lastUpdate = 0;
 
 void Log(String message)
 {
@@ -115,7 +115,7 @@ bool mqttReady()
 
 bool isMeasureTime()
 {
-  return (millis() - lastUpdate) > publishInterval;
+  return lastUpdate == 0 || (millis() - lastUpdate) > publishInterval;
 }
 
 bool publishTemp()
