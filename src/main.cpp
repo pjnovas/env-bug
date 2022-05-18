@@ -16,7 +16,8 @@ const char *mqtt_user = MQTT_USER;
 const char *mqtt_pass = MQTT_PASS;
 const char *mqtt_topic = MQTT_TOPIC;
 
-const unsigned int publishInterval = PUBLISH_INTERVAL_MS;
+const unsigned int publishInterval = PUBLISH_INTERVAL;
+const unsigned int publishInterval_ms = publishInterval * 1000;
 
 // Instances
 OneWire ds(SENSOR_PIN);
@@ -64,7 +65,9 @@ void setup()
   }
 
   Log("WIFI;ON");
+
   client.setServer(mqtt_server, mqtt_port);
+  client.setKeepAlive(publishInterval * 1.5);
 }
 
 float getTemperature()
@@ -115,7 +118,7 @@ bool mqttReady()
 
 bool isMeasureTime()
 {
-  return lastUpdate == 0 || (millis() - lastUpdate) > publishInterval;
+  return lastUpdate == 0 || (millis() - lastUpdate) > publishInterval_ms;
 }
 
 bool publishTemp()
